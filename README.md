@@ -56,7 +56,7 @@ Quiz-Mage/
    ```bash
    git clone https://github.com/venkatkesavsingh/Quiz-Mage.git
 2. Open index.html in your browser
-   ```That's it — no setup or backend needed!
+   That's it — no setup or backend needed!
 
 ## 📸 Screenshots
 Coming soon...
