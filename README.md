@@ -64,12 +64,19 @@ Coming soon...
 
 ## 🧠 Sample Question Format
 [
+
   {
-    "question": "What is the capital of India?",
-    "options": ["Mumbai", "Kolkata", "New Delhi", "Chennai"],
-    "answer": "New Delhi"
+ 
+   "question": "What is the capital of India?",
+    
+   "options": ["Mumbai", "Kolkata", "New Delhi", "Chennai"],
+    
+   "answer": "New Delhi"
+  
   },
+  
   ...
+
 ]
 
 
