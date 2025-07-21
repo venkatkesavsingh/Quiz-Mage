@@ -88,9 +88,7 @@ Coming soon...
 ## 📜 License
 Open-source and free to use under the MIT License.
 
-## .
-
-🤝 Contribute
+## 🤝 Contribute
 Have an idea or want to improve Quiz Mage? Contributions and pull requests are welcome!
 
 ---
