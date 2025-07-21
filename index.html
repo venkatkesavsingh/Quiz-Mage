@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Quiz Mage</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<header>
+  <h2 id="branding">Quiz Mage</h2>
+  <!--<div id="deepshit">
+    <p>Test your knowledge with our magical quiz!</p>
+    <p>Click on an option to answer the question.</p>
+    <p>Feedback will be provided after each selection.</p>
+  </div>
+  <p>Enjoy the quiz!</p>-->
+</header>
+<body>
+  <div class="quiz-container"> 
+    <div class="quiz-header">
+      <div id="question-number">Question 1</div>
+      <div id="live-score">Score: 0</div>
+    </div>
+    <h1>🧙 Quiz Mage</h1>
+    <div id="quiz-box">
+      <h2 id="question">Loading question...</h2>
+      <div class="options">
+        <button class="option">Option 1</button>
+        <button class="option">Option 2</button>
+        <button class="option">Option 3</button>
+        <button class="option">Option 4</button>
+      </div>
+      <p id="feedback" style="margin-top: 20px; font-weight: bold;"></p>
+    </div>
+  </div>
+  <audio id="correct-sound" src="correct.mp3"></audio>
+  <audio id="wrong-sound" src="wrong.mp3"></audio>
+  <audio id="perfect-score-sound" src="victory.mp3"></audio>
+  <audio id="defeat-score-sound" src="defeat.mp3"></audio>
+  <audio id="applause-score-sound" src="applause.mp3"></audio>
+  <script src="script.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</body>
+<footer>
+  <p>Powered by QuizMage</p>
+  <p>Version 1.0</p>
+  <p>© 2025 QuizMage Inc.</p>
+  <p>All rights reserved.</p>
+</footer>
+</html>
