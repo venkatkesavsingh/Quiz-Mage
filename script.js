@@ -1,132 +1,274 @@
+/********************************
+ * FIREBASE IMPORTS
+ ********************************/
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
+import { getDatabase, ref, get, onValue, update } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-database.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js";
+
+/********************************
+ * FIREBASE CONFIG
+ ********************************/
+const firebaseConfig = {
+  apiKey: "AIzaSyCFE2GuML1GCaWPoGHmoiFfKX_WW55kktY",
+  authDomain: "quiz-room-08.firebaseapp.com",
+  databaseURL: "https://quiz-room-08-default-rtdb.firebaseio.com",
+  projectId: "quiz-room-08",
+  storageBucket: "quiz-room-08.firebasestorage.app",
+  messagingSenderId: "62287969743",
+  appId: "1:62287969743:web:47bf77b38dde3fb7b626ba"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const auth = getAuth(app);
+signInAnonymously(auth);
+
+/********************************
+ * GLOBAL STATE
+ ********************************/
 let questions = [];
-let currentQuestionIndex = 0;
+let currentQuestionIndex = null;
+let timeLeft = 0;
 let score = 0;
+let selectedOption = null;
 
-fetch('questions.json')
-  .then(res => res.json())
-  .then(data => {
-    questions = shuffleArray(data).slice(0, 10);
-    loadQuestion();
-  })
-  .catch(err => {
-    document.getElementById("quiz-box").innerHTML = "<p>❌ Failed to load questions.</p>";
-    console.error(err);
-  });
+let isTeamVerified = false;
+let quizStarted = false;
+let waitingRoomOpen = false;
 
-function shuffleArray(arr) {
-  return arr.sort(() => Math.random() - 0.5);
+/********************************
+ * TEAM ID
+ ********************************/
+const teamId = new URLSearchParams(window.location.search).get("team");
+
+/********************************
+ * ELEMENTS
+ ********************************/
+let passcodeScreen, waitingScreen, quizScreen;
+let passcodeInput, passcodeBtn, passcodeError;
+let questionEl, timerEl, scoreEl, optionsEls, questionNumberEl;
+
+/********************************
+ * INIT
+ ********************************/
+window.addEventListener("DOMContentLoaded", init);
+
+function init() {
+  setupElements();
+  showScreen(passcodeScreen);
+  fetchQuestions();
+  setupDatabaseListeners();
 }
 
-function loadQuestion() {
-  if (currentQuestionIndex >= questions.length) {
-    showResult();
+/********************************
+ * SETUP ELEMENTS
+ ********************************/
+function setupElements() {
+  passcodeScreen = document.getElementById("passcode-box");
+  waitingScreen = document.getElementById("WaitingScreen");
+  quizScreen = document.getElementById("quiz-UI");
+
+  passcodeInput = document.getElementById("passcode-input");
+  passcodeBtn = document.getElementById("passcode-btn");
+  passcodeError = document.getElementById("passcode-error");
+
+  questionEl = document.getElementById("question");
+  timerEl = document.getElementById("timer");
+  scoreEl = document.getElementById("live-score");
+  questionNumberEl = document.getElementById("question-number");
+  optionsEls = document.querySelectorAll(".option");
+
+  passcodeBtn.disabled = true;
+
+  passcodeInput.addEventListener("input", () => {
+    const v = passcodeInput.value.trim();
+    passcodeBtn.disabled = v.length !== 6;
+    passcodeError.innerText = "";
+
+    if (v.length === 6) {
+      passcodeInput.classList.add("filled");
+      passcodeInput.blur();
+    } else {
+      passcodeInput.classList.remove("filled");
+    }
+  });
+
+  passcodeBtn.addEventListener("click", verifyPasscode);
+}
+
+/********************************
+ * SCREEN CONTROL
+ ********************************/
+function showScreen(screen) {
+  document.querySelectorAll(".screen").forEach(s =>
+    s.classList.remove("active")
+  );
+  screen.classList.add("active");
+}
+
+/********************************
+ * PASSCODE VERIFICATION
+ ********************************/
+async function verifyPasscode() {
+  if (!teamId) {
+    passcodeError.innerText = "Invalid team link";
     return;
   }
 
+  const entered = passcodeInput.value.trim();
+  const snap = await get(ref(db, `teams/${teamId}`));
+
+  if (!snap.exists()) {
+    passcodeError.innerText = "Invalid team";
+    return;
+  }
+
+  if (snap.val().passcode !== entered) {
+    passcodeError.innerText = "❌ Incorrect passcode";
+    return;
+  }
+
+  score = snap.val().score || 0;
+  isTeamVerified = true;
+
+  decidePostLoginScreen();
+}
+
+/********************************
+ * POST LOGIN FLOW
+ ********************************/
+function decidePostLoginScreen() {
+  if (waitingRoomOpen) {
+    showScreen(waitingScreen);
+  } else if (quizStarted) {
+    showScreen(quizScreen);
+  } else {
+    showScreen(waitingScreen);
+  }
+}
+
+/********************************
+ * FETCH QUESTIONS
+ ********************************/
+function fetchQuestions() {
+  fetch("questions.json")
+    .then(r => r.json())
+    .then(data => questions = data);
+}
+
+/********************************
+ * DATABASE LISTENERS
+ ********************************/
+function setupDatabaseListeners() {
+
+  onValue(ref(db, "admin/waitingRoomOpen"), snap => {
+    waitingRoomOpen = snap.val() === true;
+    if (isTeamVerified && waitingRoomOpen) {
+      showScreen(waitingScreen);
+    }
+  });
+
+  onValue(ref(db, "admin/quizStarted"), snap => {
+    quizStarted = snap.val() === true;
+
+    if (!isTeamVerified) return;
+
+    if (quizStarted) {
+      showScreen(quizScreen);
+    } else {
+      showScreen(waitingScreen);
+    }
+  });
+
+  onValue(ref(db, "admin/currentQuestionIndex"), snap => {
+    if (!isTeamVerified || !quizStarted) return;
+    currentQuestionIndex = snap.val();
+    renderQuestion();
+  });
+
+  onValue(ref(db, "admin/timeLeft"), snap => {
+    if (!isTeamVerified || !quizStarted) return;
+
+    timeLeft = snap.val() ?? 0;
+    timerEl.innerText = `Time ${timeLeft}s`;
+
+    if (timeLeft === 0) {
+      revealAnswer();
+    }
+  });
+}
+
+/********************************
+ * RENDER QUESTION
+ ********************************/
+function renderQuestion() {
   const q = questions[currentQuestionIndex];
+  if (!q) return;
 
-  // ✅ Update question number and live score
-  document.getElementById("question-number").innerText = `Question ${currentQuestionIndex + 1} of ${questions.length}`;
-  document.getElementById("live-score").innerText = `Score: ${score}`;
+  selectedOption = null;
 
-  document.getElementById("question").innerText = q.question;
-  document.getElementById("feedback").innerText = "";
+  questionNumberEl.innerText = `Question: ${currentQuestionIndex + 1}`;
+  questionEl.innerText = q.question;
+  scoreEl.innerText = `Score: ${score}`;
 
-  const options = document.querySelectorAll(".option");
-  options.forEach((btn, i) => {
-    btn.innerText = q.options[i];
-    btn.disabled = false;
-    btn.classList.remove("correct", "wrong");
-    btn.onclick = () => {
-      const isCorrect = btn.innerText === q.answer;
-      const correctSound = document.getElementById("correct-sound");
-      const wrongSound = document.getElementById("wrong-sound");
+  resetOptions();
 
-      if (isCorrect) {
-        btn.classList.add("correct");
-        document.getElementById("feedback").innerText = "✅ Correct!";
-        score++;
-      } else {
-        btn.classList.add("wrong");
-        document.getElementById("feedback").innerText = `❌ Wrong! Correct answer: ${q.answer}`;
-      }
-      if (isCorrect) {
-        correctSound.pause();
-        correctSound.currentTime = 0;
-        correctSound.play();
-      }
-      else {
-        wrongSound.pause();
-        wrongSound.currentTime = 0;
-        wrongSound.play();
-      }
+  shuffle(q.options).forEach((opt, i) => {
+    optionsEls[i].innerText = opt;
 
+    optionsEls[i].onclick = () => {
+      if (timeLeft <= 0) return;
 
-      // ✅ Update live score immediately
-      document.getElementById("live-score").innerText = `Score: ${score}`;
-
-      options.forEach(o => o.disabled = true);
-
-      setTimeout(() => {
-        currentQuestionIndex++;
-        loadQuestion();
-      }, 1500);
+      resetOptions(false);
+      optionsEls[i].classList.add("selected");
+      optionsEls[i].style.backgroundColor = "#BDBDBD";
+      selectedOption = opt;
     };
   });
 }
 
-function showResult() {
-  let message = "";
-  
-  if (score === questions.length) {
-    message = "🎉 <strong>Congratulations!</strong> You got a perfect score!";
-    startConfetti(); // 🎊 trigger confetti animation
-  } else if (score < 3) {
-    message = "😢 <strong>Better luck next time!</strong>";
-  } else {
-    message = "👏 <strong>Great job!</strong> Keep it up!";
-  }
-
-  if (score === questions.length) {
-  document.getElementById("perfect-score-sound").play();
-  }
-
-  if (score <= 3) {
-  document.getElementById("defeat-score-sound").play();
-  }
-
-  if (score >= 4 && score <= 9) {
-  document.getElementById("applause-score-sound").play();
-  }
-
-  document.getElementById("quiz-box").innerHTML = `
-    <h2>Quiz Completed!</h2>
-    <p>${message}</p>
-    <p>Your Score: ${score} / ${questions.length}</p>
-    <button onclick="location.reload()">Play Again</button>
-  `;
+/********************************
+ * OPTIONS
+ ********************************/
+function resetOptions(clearHandlers = true) {
+  optionsEls.forEach(btn => {
+    btn.disabled = false;
+    btn.className = "option";
+    btn.style.backgroundColor = "";
+    btn.style.color = "";
+    if (clearHandlers) btn.onclick = null;
+  });
 }
 
-function startConfetti() {
-  const duration = 3 * 1000;
-  const end = Date.now() + duration;
+/********************************
+ * REVEAL ANSWER
+ ********************************/
+async function revealAnswer() {
+  const q = questions[currentQuestionIndex];
+  if (!q) return;
 
-  (function frame() {
-    confetti({
-      particleCount: 7,
-      angle: 60,
-      spread: 55,
-      origin: { x: 0 }
-    });
-    confetti({
-      particleCount: 7,
-      angle: 120,
-      spread: 55,
-      origin: { x: 1 }
-    });
+  optionsEls.forEach(btn => {
+    btn.disabled = true;
 
-    if (Date.now() < end) {
-      requestAnimationFrame(frame);
+    if (btn.innerText === q.answer) {
+      btn.style.backgroundColor = "#4CAF50";
+      btn.style.color = "#fff";
+    } else if (btn.innerText === selectedOption) {
+      btn.style.backgroundColor = "#E53935";
+      btn.style.color = "#fff";
     }
-  })();
+  });
+
+  if (selectedOption === q.answer) score += 10;
+  else if (selectedOption) score -= 5;
+
+  scoreEl.innerText = `Score: ${score}`;
+  await update(ref(db, `teams/${teamId}`), { score });
+}
+
+/********************************
+ * UTIL
+ ********************************/
+function shuffle(arr) {
+  return [...arr].sort(() => Math.random() - 0.5);
 }
